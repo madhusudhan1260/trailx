@@ -1,0 +1,112 @@
+{
+  "expo": {
+    "name": "TRAILX",
+    "slug": "trailx",
+    "scheme": "trailx",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050806",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "ios": {
+      "bundleIdentifier": "app.trailx.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "bluetooth-central",
+          "bluetooth-peripheral"
+        ],
+        "NSLocationWhenInUseUsageDescription": "TRAILX records your route with GPS so you can retrace it back to your starting point. Nothing leaves your phone.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TRAILX keeps recording your route while the screen is locked so your way back is complete.",
+        "NSMotionUsageDescription": "TRAILX uses the compass to point you toward your next waypoint.",
+        "NSBluetoothAlwaysUsageDescription": "TRAILX exchanges encrypted emergency messages with nearby TRAILX devices over Bluetooth.",
+        "NSContactsUsageDescription": "TRAILX lets you pick trusted emergency contacts from your address book. Contacts stay on this device.",
+        "NSPhotoLibraryUsageDescription": "Attach photos to your trek notes.",
+        "NSCameraUsageDescription": "Take photos for your trek notes."
+      }
+    },
+    "android": {
+      "package": "app.trailx.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#050806"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_ADVERTISE",
+        "READ_CONTACTS",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#050806",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "TRAILX keeps recording your route while the screen is locked so your way back is complete."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#C6FF3D"
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "TRAILX lets you pick trusted emergency contacts. Contacts stay on this device."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Attach photos to your trek notes.",
+          "cameraPermission": "Take photos for your trek notes."
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": [
+            "peripheral",
+            "central"
+          ],
+          "bluetoothAlwaysPermission": "TRAILX exchanges encrypted emergency messages with nearby TRAILX devices over Bluetooth."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

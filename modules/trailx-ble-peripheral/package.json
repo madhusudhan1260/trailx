@@ -1,0 +1,10 @@
+{
+  "name": "trailx-ble-peripheral",
+  "version": "1.0.0",
+  "description": "BLE peripheral (GATT server + advertising) for TRAILX device-to-device emergency messaging",
+  "main": "index.ts",
+  "license": "MIT",
+  "author": "TRAILX",
+  "homepage": "https://trailx.app",
+  "private": true
+}
