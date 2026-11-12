@@ -1,12 +1,14 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { AppState, Platform } from 'react-native';
+import { reduceGps, type GeoErrorKind, type GpsEvent } from '@/core/gpsMachine';
 import type { RawFix, SamplingMode } from '@/core/types';
 import { getDb } from '@/db';
 import { attachDraftPlan, getPlanForSession, getPoints } from '@/db/repo';
 import { useApp } from '@/store';
 import { cancelOverdueNotification, scheduleOverdueNotification } from './notify';
 import { TrekRecorder, type ActiveTrek } from './recorder';
+import { chooseGpsBackend, positionToFix, WebGps, type GeolocationLike, type PermissionsLike } from './webGps';
 
 export const LOCATION_TASK = 'trailx-location-updates';
 
@@ -14,6 +16,43 @@ let recorder: Promise<TrekRecorder> | null = null;
 export function getRecorder(): Promise<TrekRecorder> {
   if (!recorder) recorder = getDb().then((db) => new TrekRecorder(db));
   return recorder;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Platform GPS backends: iOS/Android → Expo Location (+ TaskManager for background);
+// web → the browser Geolocation API via WebGps. Both feed handleFixes().
+// ----------------------------------------------------------------------------------------------
+
+export const GPS_BACKEND = chooseGpsBackend(Platform.OS);
+
+/** Feeds the GPS state machine. */
+export function gpsEvent(e: GpsEvent) {
+  const s = useApp.getState();
+  s.set({ geo: reduceGps(s.geo, e) });
+}
+
+function onGeoError(kind: GeoErrorKind, code: number | null, message: string) {
+  gpsEvent({ type: 'ERROR', now: Date.now(), kind, code, message });
+  if (kind === 'denied') useApp.getState().set({ permission: 'denied' });
+}
+
+let webGps: WebGps | null = null;
+/** The browser adapter. Only ever created on web; on native this is never called. */
+export function getWebGps(): WebGps {
+  if (!webGps) {
+    const g = globalThis as unknown as { navigator?: { geolocation?: GeolocationLike; permissions?: PermissionsLike }; isSecureContext?: boolean; addEventListener?: (t: string, f: () => void) => void };
+    webGps = new WebGps(
+      {
+        geolocation: () => g.navigator?.geolocation,
+        secure: () => g.isSecureContext !== false,
+        permissions: () => g.navigator?.permissions,
+      },
+      { onFix: (p) => void handleFixes([positionToFix(p)]), onError: onGeoError },
+    );
+    // Release the GPS when the page is closed or navigated away from.
+    g.addEventListener?.('pagehide', () => webGps?.stop());
+  }
+  return webGps;
 }
 
 /** True once any fix flagged as mocked by the OS has been seen this session. */
@@ -43,6 +82,7 @@ export async function handleFixes(fixes: RawFix[]): Promise<void> {
   const prev = useApp.getState().fix;
   if (!prev || latest.t > prev.t) {
     set({ fix: latest, fixAt: Date.now(), recentFixes: [...useApp.getState().recentFixes, latest].slice(-30), acquiring: false });
+    gpsEvent({ type: 'FIX', now: Date.now(), acc: latest.acc });
   }
   const rec = await getRecorder();
   const r = await rec.ingest(fixes);
@@ -82,6 +122,20 @@ export const SAMPLING_INFO: Record<SamplingMode, { label: string; detail: string
 
 export async function refreshPermissions(): Promise<void> {
   const { set } = useApp.getState();
+  if (GPS_BACKEND === 'browser') {
+    const g = getWebGps();
+    const sup = g.support();
+    if (sup !== 'ok') {
+      onGeoError(sup, null, sup === 'insecure' ? 'Page is not a secure context' : 'navigator.geolocation is missing');
+      set({ permission: 'unknown', backgroundPermission: null, servicesEnabled: null });
+      return;
+    }
+    const st = await g.permissionState();
+    // iOS browsers often report "prompt" even after access was allowed; a fix we received proves it.
+    const proven = useApp.getState().geo.fixCount > 0 && useApp.getState().permission === 'granted';
+    set({ permission: st === 'granted' || (proven && st !== 'denied') ? 'granted' : st === 'denied' ? 'denied' : 'unknown', backgroundPermission: null, servicesEnabled: true });
+    return;
+  }
   try {
     const fg = await Location.getForegroundPermissionsAsync();
     let bg: boolean | null = null;
@@ -94,9 +148,25 @@ export async function refreshPermissions(): Promise<void> {
 }
 
 export async function requestForeground(): Promise<boolean> {
+  if (GPS_BACKEND === 'browser') {
+    gpsEvent({ type: 'REQUEST_PERMISSION', now: Date.now() });
+    const r = await getWebGps().requestPermission();
+    if (r !== 'granted') {
+      if (r === 'denied') useApp.getState().set({ permission: 'denied' });
+      return false;
+    }
+    useApp.getState().set({ permission: 'granted', servicesEnabled: true });
+    gpsEvent({ type: 'PERMISSION_GRANTED', now: Date.now() });
+    void startLiveWatch();
+    return true;
+  }
+  gpsEvent({ type: 'REQUEST_PERMISSION', now: Date.now() });
   const r = await Location.requestForegroundPermissionsAsync();
   await refreshPermissions();
-  if (r.granted) void startLiveWatch();
+  if (r.granted) {
+    gpsEvent({ type: 'PERMISSION_GRANTED', now: Date.now() });
+    void startLiveWatch();
+  } else onGeoError('denied', 1, 'Location permission was not granted');
   return r.granted;
 }
 
@@ -117,22 +187,38 @@ let liveStarting = false;
 export async function startLiveWatch(): Promise<void> {
   if (liveSub || liveStarting) return;
   if (useApp.getState().permission !== 'granted') return;
+  if (GPS_BACKEND === 'browser') {
+    const g = getWebGps();
+    if (g.start()) {
+      useApp.getState().set({ acquiring: !useApp.getState().fix });
+      gpsEvent({ type: 'PERMISSION_GRANTED', now: Date.now() });
+    } else g.wake();
+    return;
+  }
   liveStarting = true;
   try {
     useApp.getState().set({ acquiring: !useApp.getState().fix });
     liveSub = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 0 },
       (l) => void handleFixes([toFix(l)]),
-      () => useApp.getState().set({ servicesEnabled: false }),
+      (reason) => {
+        useApp.getState().set({ servicesEnabled: false });
+        onGeoError('unavailable', null, String(reason));
+      },
     );
-  } catch {
+  } catch (e) {
     liveSub = null;
+    onGeoError('unknown', null, (e as Error).message);
   } finally {
     liveStarting = false;
   }
 }
 
 export function stopLiveWatch() {
+  if (GPS_BACKEND === 'browser') {
+    webGps?.stop();
+    return;
+  }
   liveSub?.remove();
   liveSub = null;
 }
@@ -147,6 +233,8 @@ export function acquireFix(timeoutMs = 30_000, goodEnough = 25): Promise<RawFix 
       const fresh = s.fix && s.fixAt != null && s.fixAt >= startedAt - 3000 ? s.fix : null;
       if (fresh && fresh.acc != null && (!best || (best.acc ?? Infinity) >= fresh.acc)) best = fresh;
       if (best && best.acc != null && best.acc <= goodEnough) return done(best);
+      // Permission revoked / insecure page / no geolocation: waiting longer cannot produce a fix.
+      if (!best && s.geo.phase === 'error') return done(null);
       if (Date.now() - startedAt > timeoutMs) return done(best);
     };
     const timer = setInterval(check, 400);
@@ -203,20 +291,47 @@ const FOREGROUND_ONLY_WARNING =
 
 export type StartResult = { ok: true; trek: ActiveTrek } | { ok: false; reason: 'permission' | 'services' | 'no_fix' | 'error'; message: string };
 
-export async function startTrek(name: string, mode: SamplingMode): Promise<StartResult> {
+/** Explains a failed start using the real geolocation error rather than a generic guess. */
+function noFixMessage(): string {
+  const err = useApp.getState().geo.lastError;
+  if (err?.kind === 'insecure')
+    return 'This page was not opened over https://, so the browser blocks GPS. Open TRAILX from an https:// address (or localhost) and try again.';
+  if (err?.kind === 'unsupported') return 'This browser does not provide GPS (no Geolocation API). Try Safari or Chrome, or use the installed app.';
+  if (err?.kind === 'denied') return permissionMessage();
+  return 'No GPS fix yet. Move to open sky, away from buildings and dense canopy, and try again. The trek was not started because there is no starting point to return to.';
+}
+
+function permissionMessage(): string {
+  const err = useApp.getState().geo.lastError;
+  if (GPS_BACKEND === 'browser') {
+    if (err?.kind === 'insecure' || err?.kind === 'unsupported') return noFixMessage();
+    return 'Location is blocked for this page. On iPhone: Settings → Privacy & Security → Location Services → Chrome (or Safari) → "While Using the App" and Precise Location on. Then reload this page and tap Allow when asked.';
+  }
+  return 'TRAILX needs location access to record your route. Enable it in system settings.';
+}
+
+let starting: Promise<StartResult> | null = null;
+/** Pressing START repeatedly while the first fix is being acquired never starts two treks. */
+export function startTrek(name: string, mode: SamplingMode): Promise<StartResult> {
+  if (!starting) starting = startTrekOnce(name, mode).finally(() => (starting = null));
+  return starting;
+}
+
+async function startTrekOnce(name: string, mode: SamplingMode): Promise<StartResult> {
   const { set } = useApp.getState();
   try {
     await refreshPermissions();
     if (useApp.getState().permission !== 'granted' && !(await requestForeground()))
-      return { ok: false, reason: 'permission', message: 'TRAILX needs location access to record your route. Enable it in system settings.' };
+      return { ok: false, reason: 'permission', message: permissionMessage() };
     if (useApp.getState().servicesEnabled === false)
       return { ok: false, reason: 'services', message: 'Location is switched off on this device. Turn it on to start a trek.' };
 
     set({ acquiring: true });
+    void startLiveWatch();
     const startFix = await acquireFix();
     set({ acquiring: false });
     if (!startFix)
-      return { ok: false, reason: 'no_fix', message: 'No GPS fix yet. Move to open sky, away from buildings and dense canopy, and try again. The trek was not started because there is no starting point to return to.' };
+      return { ok: false, reason: 'no_fix', message: noFixMessage() };
 
     if (Platform.OS !== 'web' && !useApp.getState().backgroundPermission) await requestBackground();
     const background = await startBackgroundUpdates(mode);
@@ -235,6 +350,7 @@ export async function startTrek(name: string, mode: SamplingMode): Promise<Start
       returnTrekId: null,
       nav: null,
     });
+    gpsEvent({ type: 'TRACKING_START', now: Date.now() });
     return { ok: true, trek };
   } catch (e) {
     set({ acquiring: false });
@@ -262,6 +378,7 @@ export async function finishTrek(): Promise<number | null> {
   if (plan) await cancelOverdueNotification(plan);
   const s = useApp.getState();
   s.set({ trek: null, trail: [], plan: null, backgroundActive: null, trackingWarning: null });
+  gpsEvent({ type: 'TRACKING_STOP', now: Date.now() });
   s.touch();
   return done?.id ?? null;
 }
@@ -273,6 +390,7 @@ export async function cancelTrek() {
   await stopBackgroundUpdates();
   if (plan) await cancelOverdueNotification(plan);
   useApp.getState().set({ trek: null, trail: [], plan: null, backgroundActive: null, trackingWarning: null });
+  gpsEvent({ type: 'TRACKING_STOP', now: Date.now() });
 }
 
 /** Changes the sampling mode mid-trek by restarting the location service — recording never stops silently. */
@@ -303,6 +421,7 @@ export async function restoreTracking(): Promise<void> {
     return;
   }
   set({ trek, trail: await getPoints(db, trek.id), plan: await getPlanForSession(db, trek.id) });
+  gpsEvent({ type: 'TRACKING_START', now: Date.now() });
   if (trek.lastFix && !useApp.getState().fix) set({ fix: trek.lastFix, fixAt: trek.lastFix.t });
   let background = false;
   if (Platform.OS !== 'web') {

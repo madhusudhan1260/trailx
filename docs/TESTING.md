@@ -2,7 +2,7 @@
 
 Nothing below is simulated-and-presented-as-real. Each item says how it was checked.
 
-## Automated (run `npm test`) — 75 tests, all passing
+## Automated (run `npm test`) — 89 tests, all passing
 
 | Area | What is covered |
 |---|---|
@@ -14,6 +14,7 @@ Nothing below is simulated-and-presented-as-real. Each item says how it was chec
 | Emergency | every required message field, last-known vs live wording, unknown location, SOS with no connectivity stores event + trail + queue, delivery states cannot skip to "confirmed", resolve, safety plan attach |
 | BLE protocol | encryption round trip, wrong key fails, tamper detection, unique ids, duplicate drop, expiry, hop limit, hop-cap enforcement, relay without key, fragmentation/reassembly |
 | Export | GPX segments and points, JSON losslessness, file names |
+| GPS acquisition (`gps.test.ts`) | browser adapter + state machine: genuine fix, permission denied, timeout before first fix is *searching* not *lost*, position unavailable, poor accuracy shown weak and still rejected by the filter, interruption → probe → watch restart → reacquiring, recovery, repeated START creates one watcher / one trek, STOP clears watch + timers and ignores late callbacks, web vs native backend selection, unsupported browser, insecure http:// page, browser fixes recorded by the existing TrekRecorder |
 
 ## Checked by running the app in a browser (Expo web)
 
@@ -27,6 +28,26 @@ rendered once from a clearly-labelled synthetic trek written through the real re
 then deleted. That checks drawing only — it says nothing about real GPS behaviour.
 
 The browser preview had location permission denied, so **no recording has been run with a live fix**.
+
+GPS fix (Nov 2026): with a *test double* for `navigator.geolocation` injected into the preview page
+(never shipped), START TREK acquired a fix, created one watcher with `enableHighAccuracy`, recorded
+breadcrumbs, showed "Reacquiring GPS…" during a 38 s outage while recording continued, and
+recovered by itself. The test trek was discarded. A real phone outdoors has still not been tested.
+
+### Testing GPS in a phone browser
+
+Browsers only give GPS to **https://** pages (or `localhost` on the same device). Opening the dev
+server as `http://<laptop-ip>:8087` on a phone is blocked by the browser; TRAILX now says so
+("GPS needs a secure (https://) page") instead of waiting. Serve it over https, e.g.:
+
+1. `npx expo start --web --port 8087`
+2. In another terminal: `ngrok http 8087` (free account) and open the `https://…ngrok…` URL on the phone.
+3. iPhone: Settings → Privacy & Security → Location Services → Chrome → *While Using the App*,
+   *Precise Location* on. Allow location when the page asks.
+4. Profile → **GPS diagnostics** shows secure-page, permission, state, accuracy, fix age and the last
+   geolocation error code. Coordinates stay hidden unless you tap *Show coordinates*.
+
+A browser cannot record with the screen locked or the tab in the background — use the installed app for that.
 
 ## Android build
 

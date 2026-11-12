@@ -1,6 +1,7 @@
 import { BatteryCharging, BatteryFull, BatteryLow, BatteryMedium, BatteryWarning, Satellite, Wifi, WifiOff } from 'lucide-react-native';
 import React from 'react';
 import { View } from 'react-native';
+import { gpsMessage } from '@/core/gpsMachine';
 import { fmtAge } from '@/core/stats';
 import { gpsStatus, GPS_LABEL, useApp } from '@/store';
 import { Pill, T } from './primitives';
@@ -13,9 +14,10 @@ export function useGps() {
   const servicesEnabled = useApp((s) => s.servicesEnabled);
   const fix = useApp((s) => s.fix);
   const fixAt = useApp((s) => s.fixAt);
-  const status = gpsStatus({ permission, servicesEnabled, fix, fixAt }, now);
-  const color = status === 'good' ? C.lime : status === 'fair' ? '#E6D34A' : status === 'acquiring' ? C.text2 : C.orange;
-  return { status, color, label: GPS_LABEL[status], fix, fixAt, ageMs: fixAt != null ? now - fixAt : null, live: status === 'good' || status === 'fair' || status === 'poor' };
+  const geo = useApp((s) => s.geo);
+  const status = gpsStatus({ permission, servicesEnabled, fix, fixAt, geo }, now);
+  const color = status === 'good' ? C.lime : status === 'fair' ? '#E6D34A' : status === 'acquiring' || status === 'requesting' ? C.text2 : C.orange;
+  return { status, color, label: status === 'unsupported' ? gpsMessage(geo) : GPS_LABEL[status], geo, fix, fixAt, ageMs: fixAt != null ? now - fixAt : null, live: status === 'good' || status === 'fair' || status === 'poor' };
 }
 
 export function SignalBars({ level, color }: { level: 0 | 1 | 2 | 3; color: string }) {

@@ -54,6 +54,7 @@ export default function Trek() {
         <View style={{ marginVertical: S.lg }}><StatusRow /></View>
         <View style={{ alignItems: 'center' }}><StartButton onPress={start} busy={busy} sub={gps.live ? 'Records offline' : gps.label} /></View>
         {error ? <Banner icon={TriangleAlert} title="Trek not started" body={error} /> : null}
+        {error ? <Tap onPress={() => router.push('/gps')} style={{ alignSelf: 'center', padding: S.md }}><T v="small" color={C.limeDim}>Open GPS diagnostics</T></Tap> : null}
       </Screen>
     );
   }
@@ -121,7 +122,7 @@ export default function Trek() {
       <View style={{ gap: S.md, marginTop: S.xl }}>
         {warning ? <Banner icon={TriangleAlert} title="Recording may stop when the screen locks" body={warning} /> : null}
         {mockLocationSeen() ? <Banner icon={TriangleAlert} title="Mock location detected" body="The operating system reports that positions are being supplied by a mock-location app, not the GPS receiver. This trail is not real positioning." /> : null}
-        {gps.status === 'lost' || gps.status === 'poor' ? <Banner icon={TriangleAlert} title={gps.status === 'lost' ? 'GPS signal lost' : 'GPS signal weak'} body="Recording continues. Poor fixes are not added to your trail; if you move while the signal is gone, that stretch will be marked as an estimated gap." /> : null}
+        {gps.status === 'lost' || gps.status === 'poor' ? <Banner icon={TriangleAlert} title={gps.status === 'lost' ? 'GPS signal lost — reacquiring' : 'GPS accuracy is weak'} body="Recording continues. Poor fixes are not added to your trail; if you move while the signal is gone, that stretch will be marked as an estimated gap." /> : null}
       </View>
 
       <Enter delay={240} style={{ marginTop: S.xl, gap: S.md }}>

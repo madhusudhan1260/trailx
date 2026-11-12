@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Check, History } from 'lucide-react-native';
+import { Check, History, Satellite } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Linking, Platform, View } from 'react-native';
 import type { SamplingMode } from '@/core/types';
@@ -43,6 +43,9 @@ export default function Profile() {
 
       <Tap onPress={() => router.push('/history')} style={{ marginTop: S.xl }}>
         <Glass style={{ padding: S.lg, flexDirection: 'row', gap: S.md, alignItems: 'center' }}><History size={20} color={C.lime} /><T v="h3" style={{ flex: 1 }}>Trek history</T></Glass>
+      </Tap>
+      <Tap onPress={() => router.push('/gps')} style={{ marginTop: S.sm }}>
+        <Glass style={{ padding: S.lg, flexDirection: 'row', gap: S.md, alignItems: 'center' }}><Satellite size={20} color={C.lime} /><T v="h3" style={{ flex: 1 }}>GPS diagnostics</T></Glass>
       </Tap>
 
       <T v="label" style={{ marginTop: S.xxl, marginBottom: S.sm }}>Default GPS sampling</T>

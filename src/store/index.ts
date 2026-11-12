@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { initialGpsMachine, type GpsMachine } from '@/core/gpsMachine';
 import type { NavState } from '@/core/reverseNav';
 import type { GpsStatus, RawFix, TrackPoint } from '@/core/types';
 import type { SafetyPlan, User } from '@/db/repo';
@@ -25,6 +26,8 @@ export interface AppState {
   fixAt: number | null;
   recentFixes: RawFix[];
   acquiring: boolean;
+  /** GPS acquisition state machine (see core/gpsMachine). */
+  geo: GpsMachine;
 
   heading: Heading | null;
   compassAvailable: boolean | null;
@@ -59,6 +62,7 @@ export const useApp = create<AppState>((set) => ({
   fixAt: null,
   recentFixes: [],
   acquiring: false,
+  geo: initialGpsMachine(),
   heading: null,
   compassAvailable: null,
   battery: null,
@@ -80,10 +84,14 @@ export const useApp = create<AppState>((set) => ({
 /** After this long without a fix, positioning is reported as lost rather than live. */
 export const FIX_STALE_MS = 30_000;
 
-export function gpsStatus(s: Pick<AppState, 'permission' | 'servicesEnabled' | 'fix' | 'fixAt'>, now: number): GpsStatus {
-  if (s.permission !== 'granted' && !s.fix) return 'no_permission';
+export function gpsStatus(s: Pick<AppState, 'permission' | 'servicesEnabled' | 'fix' | 'fixAt'> & { geo?: GpsMachine }, now: number): GpsStatus {
+  const err = s.geo?.phase === 'error' ? s.geo.lastError : null;
+  if (err?.kind === 'denied') return 'no_permission';
+  if (err?.kind === 'unsupported' || err?.kind === 'insecure') return 'unsupported';
+  if (s.permission !== 'granted' && !s.fix) return s.geo?.phase === 'requesting_permission' ? 'requesting' : 'no_permission';
   if (s.servicesEnabled === false) return 'off';
-  if (!s.fix || s.fixAt == null) return 'acquiring';
+  if (!s.fix || s.fixAt == null) return s.geo?.phase === 'requesting_permission' ? 'requesting' : 'acquiring';
+  // A receiver that has gone quiet is reacquiring, not dead: the adapters keep asking for fixes.
   if (now - s.fixAt > FIX_STALE_MS) return 'lost';
   const a = s.fix.acc;
   if (a == null) return 'poor';
@@ -92,10 +100,12 @@ export function gpsStatus(s: Pick<AppState, 'permission' | 'servicesEnabled' | '
 
 export const GPS_LABEL: Record<GpsStatus, string> = {
   off: 'Location is off',
-  no_permission: 'Location not allowed',
-  acquiring: 'Searching for GPS',
+  no_permission: 'Enable location permission',
+  unsupported: 'GPS is not supported here',
+  requesting: 'Acquiring GPS signal…',
+  acquiring: 'Searching for satellites…',
   good: 'GPS strong',
   fair: 'GPS fair',
-  poor: 'GPS weak',
-  lost: 'GPS signal lost',
+  poor: 'GPS accuracy is weak',
+  lost: 'Reacquiring GPS…',
 };

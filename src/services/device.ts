@@ -66,6 +66,12 @@ let headingUsers = 0;
 /** Reference-counted: the magnetometer only runs while a screen that shows a compass is mounted. */
 export async function retainCompass(): Promise<() => void> {
   headingUsers++;
+  // expo-location has no compass on web (it only logs a warning), and registering one there used to
+  // consume a watcher id that broke position updates. Report it honestly as unavailable instead.
+  if (Platform.OS === 'web') {
+    useApp.getState().set({ compassAvailable: false });
+    return () => { headingUsers = Math.max(0, headingUsers - 1); };
+  }
   if (!headingSub) {
     try {
       headingSub = await Location.watchHeadingAsync((h) => {

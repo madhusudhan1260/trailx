@@ -55,6 +55,7 @@ export default function RootLayout() {
           <Stack.Screen name="history/[id]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="profile" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="beacon" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="gps" options={{ animation: 'slide_from_right' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

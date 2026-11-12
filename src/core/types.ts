@@ -36,7 +36,7 @@ export interface TrackPoint extends RawFix {
 
 export type SamplingMode = 'precise' | 'balanced' | 'saver';
 
-export type GpsStatus = 'off' | 'no_permission' | 'acquiring' | 'good' | 'fair' | 'poor' | 'lost';
+export type GpsStatus = 'off' | 'no_permission' | 'unsupported' | 'requesting' | 'acquiring' | 'good' | 'fair' | 'poor' | 'lost';
 
 export type TrekStatus = 'recording' | 'paused' | 'finished';
 
