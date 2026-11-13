@@ -13,7 +13,7 @@ import { startReturn, stopReturn, takeRouteShortcut } from '@/services/returnNav
 import { useApp } from '@/store';
 import { Compass, DirectionArrow } from '@/ui/Compass';
 import { Banner, Button, Enter, Glass, Screen, T } from '@/ui/primitives';
-import { RouteCanvas } from '@/ui/RouteCanvas';
+import { TrekMap } from '@/ui/TrekMap';
 import { BigStat, Stat, useEased } from '@/ui/Stat';
 import { LastKnown, useGps } from '@/ui/Status';
 import { C, S } from '@/ui/theme';
@@ -162,7 +162,7 @@ export default function Return() {
           </View>
 
           <View style={{ marginTop: S.lg }}>
-            <RouteCanvas points={shown} current={cur} stale={!gps.live} heading={h} target={nav?.target ?? null} direction="reverse" litUntil={nav ? nav.nextIndex + 2 : undefined} height={320} />
+            <TrekMap points={shown} current={cur} stale={!gps.live} heading={h} target={nav?.target ?? null} direction="reverse" litUntil={nav ? nav.nextIndex + 2 : undefined} height={320} />
             <View style={{ marginTop: 8 }}><LastKnown /></View>
           </View>
 

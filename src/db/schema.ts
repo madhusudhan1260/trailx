@@ -11,7 +11,7 @@ export interface Db {
   tx<T>(fn: () => Promise<T>): Promise<T>;
 }
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const V1 = `
 CREATE TABLE IF NOT EXISTS users (
@@ -193,6 +193,25 @@ const V2_USER_COLUMNS = [
   'emergency_notes TEXT', 'experience TEXT', 'difficulty TEXT', 'typical_duration TEXT', 'profile_created_at INTEGER', 'updated_at INTEGER',
 ];
 
+/** v3: map areas downloaded for offline use. The tiles themselves live in the platform's map store. */
+const V3 = `
+CREATE TABLE IF NOT EXISTS map_areas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  west REAL NOT NULL, south REAL NOT NULL, east REAL NOT NULL, north REAL NOT NULL,
+  min_zoom INTEGER NOT NULL, max_zoom INTEGER NOT NULL,
+  tile_count INTEGER NOT NULL,
+  bytes INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('downloading','complete','failed')),
+  error TEXT,
+  pack_id TEXT,
+  session_id INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_map_areas_status ON map_areas(status);
+`;
+
 export async function migrate(db: Db, now = Date.now()): Promise<void> {
   await db.exec('PRAGMA journal_mode = WAL;');
   await db.exec('PRAGMA foreign_keys = ON;');
@@ -210,6 +229,14 @@ export async function migrate(db: Db, now = Date.now()): Promise<void> {
       const have = new Set((await db.all<{ name: string }>("SELECT name FROM pragma_table_info('users')")).map((c) => c.name));
       for (const col of V2_USER_COLUMNS) if (!have.has(col.split(' ')[0])) await db.exec(`ALTER TABLE users ADD COLUMN ${col}`);
     });
+    await db.exec('PRAGMA user_version = 2');
+  }
+  if (v < 3) {
+    await db.tx(async () => {
+      await db.exec(V3);
+      // An app killed mid-download leaves rows that will never finish; mark them so they can be retried.
+    });
     await db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   }
+  await db.run("UPDATE map_areas SET status = 'failed', error = 'Interrupted — the app closed during the download' WHERE status = 'downloading'");
 }

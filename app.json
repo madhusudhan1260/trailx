@@ -103,7 +103,8 @@
           "bluetoothAlwaysPermission": "TRAILX exchanges encrypted emergency messages with nearby TRAILX devices over Bluetooth."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@maplibre/maplibre-react-native"
     ],
     "experiments": {
       "typedRoutes": false

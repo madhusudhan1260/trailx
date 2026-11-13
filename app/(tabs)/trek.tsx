@@ -5,13 +5,13 @@ import { View } from 'react-native';
 import { fmtDistance, fmtDuration, fmtSpeed } from '@/core/stats';
 import type { SamplingMode } from '@/core/types';
 import { getDb } from '@/db';
-import { addNote, addWaypoint } from '@/db/repo';
+import { addNote, addWaypoint, listWaypoints } from '@/db/repo';
 import { haptic } from '@/services/device';
 import { getRecorder, cancelTrek, changeSamplingMode, finishTrek, mockLocationSeen, pauseTrek, resumeTrek, SAMPLING_INFO, startTrek } from '@/services/tracking';
 import { useApp } from '@/store';
 import { StartButton } from '@/ui/Buttons';
 import { Banner, Button, Enter, Field, Glass, Pill, Screen, T, Tap } from '@/ui/primitives';
-import { RouteCanvas } from '@/ui/RouteCanvas';
+import { TrekMap } from '@/ui/TrekMap';
 import { Confirm, Sheet } from '@/ui/Sheet';
 import { BigStat, Stat, useEased, useNow } from '@/ui/Stat';
 import { LastKnown, StatusRow, useGps } from '@/ui/Status';
@@ -34,6 +34,14 @@ export default function Trek() {
   const [text, setText] = useState('');
   const [rec, setRec] = useState<Awaited<ReturnType<typeof getRecorder>> | null>(null);
   React.useEffect(() => { void getRecorder().then(setRec); }, []);
+  const dataVersion = useApp((s) => s.dataVersion);
+  const [wps, setWps] = useState<{ lat: number; lon: number; name: string }[]>([]);
+  React.useEffect(() => {
+    if (!trek) return setWps([]);
+    let alive = true;
+    void getDb().then((db) => listWaypoints(db, trek.id)).then((w) => { if (alive) setWps(w.map((x) => ({ lat: x.lat, lon: x.lon, name: x.name }))); });
+    return () => { alive = false; };
+  }, [trek?.id, dataVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stats = trek && rec ? rec.liveStats(now) : null;
   const dist = useEased(stats?.distance ?? 0);
@@ -102,7 +110,7 @@ export default function Trek() {
       </Enter>
 
       <Enter delay={120} style={{ marginTop: S.lg }}>
-        <RouteCanvas points={trail} current={cur} stale={!gps.live} heading={heading ? heading.true ?? heading.mag : null} height={330} />
+        <TrekMap points={trail} start={trek.start} waypoints={wps} current={cur} stale={!gps.live} heading={heading ? heading.true ?? heading.mag : null} height={330} />
         <View style={{ marginTop: 8 }}><LastKnown /></View>
       </Enter>
 

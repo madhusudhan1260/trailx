@@ -13,7 +13,7 @@ import { startReturn } from '@/services/returnNav';
 import { useApp } from '@/store';
 import { ElevationChart } from '@/ui/ElevationChart';
 import { Banner, Button, Enter, Field, Glass, Header, IconButton, Screen, T, Tap } from '@/ui/primitives';
-import { RouteCanvas } from '@/ui/RouteCanvas';
+import { TrekMap } from '@/ui/TrekMap';
 import { Confirm, Sheet } from '@/ui/Sheet';
 import { BigStat, Stat } from '@/ui/Stat';
 import { C, S } from '@/ui/theme';
@@ -100,7 +100,7 @@ export default function TrekDetail() {
       <BigStat label="Total distance" value={d.value} unit={d.unit} size={68} note={s && s.estimatedDistance > 0 ? `≈${Math.round(s.estimatedDistance)} m of this is estimated across ${s.gapCount} GPS gap${s.gapCount > 1 ? 's' : ''}` : undefined} />
 
       <View style={{ marginTop: S.lg }}>
-        <RouteCanvas points={points} waypoints={wps} litUntil={idx != null ? idx + 1 : undefined} ghost={ghost} height={340} />
+        <TrekMap points={points} waypoints={wps} litUntil={idx != null ? idx + 1 : undefined} ghost={ghost} height={340} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, marginTop: S.md }}>
           <IconButton icon={running ? Pause : Play} label={running ? 'Pause playback' : 'Play route'} onPress={() => { if (!running && (play == null || play >= 1)) setPlay(0); setRunning(!running); }} />
           <View style={{ flex: 1 }}>

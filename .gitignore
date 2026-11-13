@@ -10,3 +10,4 @@ expo-env.d.ts
 modules/*/android/build/
 modules/*/android/.gradle/
 .cxx/
+/public/maplibre-gl-worker.js

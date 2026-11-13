@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { initialGpsMachine, type GpsMachine } from '@/core/gpsMachine';
 import type { NavState } from '@/core/reverseNav';
 import type { GpsStatus, RawFix, TrackPoint } from '@/core/types';
-import type { SafetyPlan, User } from '@/db/repo';
+import type { MapArea, SafetyPlan, User } from '@/db/repo';
 import type { ActiveTrek } from '@/services/recorder';
 
 export interface Heading {
@@ -46,6 +46,10 @@ export interface AppState {
   returnTrekId: number | null;
   nav: NavState | null;
 
+  /** Offline map areas saved on this device, and the download in progress (if any). */
+  mapAreas: MapArea[];
+  mapDownload: { areaId: number; fraction: number; bytes: number; radiusM: number } | null;
+
   /** Bumped whenever stored history/safety data changes, so lists reload. */
   dataVersion: number;
   set: (p: Partial<AppState>) => void;
@@ -76,6 +80,8 @@ export const useApp = create<AppState>((set) => ({
   plan: null,
   returnTrekId: null,
   nav: null,
+  mapAreas: [],
+  mapDownload: null,
   dataVersion: 0,
   set: (p) => set(p),
   touch: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),

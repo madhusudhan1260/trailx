@@ -298,6 +298,22 @@ function noFixMessage(): string {
     return 'This page was not opened over https://, so the browser blocks GPS. Open TRAILX from an https:// address (or localhost) and try again.';
   if (err?.kind === 'unsupported') return 'This browser does not provide GPS (no Geolocation API). Try Safari or Chrome, or use the installed app.';
   if (err?.kind === 'denied') return permissionMessage();
+  if (GPS_BACKEND === 'browser') {
+    const ua = (globalThis as { navigator?: { userAgent?: string; maxTouchPoints?: number } }).navigator;
+    const mac = /Macintosh/.test(ua?.userAgent ?? '') && !(ua?.maxTouchPoints && ua.maxTouchPoints > 1);
+    const desktop = mac || /Windows|Linux x86|CrOS/.test(ua?.userAgent ?? '');
+    const code = err?.code != null ? ` (browser error ${err.code}${err.message ? `: ${err.message}` : ''})` : '';
+    if (desktop) {
+      const fix = mac
+        ? 'Open System Settings → Privacy & Security → Location Services, make sure it is on and Google Chrome (or your browser) is switched on, then reload this page.'
+        : 'Check that location is enabled for your browser in the operating system settings, then reload this page.';
+      return `The browser is allowed to use location, but the computer did not provide a position${code}. ${fix} Computers have no GPS receiver — their position comes from nearby Wi-Fi and is approximate. Use a phone for real treks.`;
+    }
+    if (err?.kind === 'unavailable')
+      return `The phone could not determine a position${code}. Check that Location Services is on and Precise Location is allowed for this browser, move outdoors, then try again.`;
+    if (err?.kind === 'timeout')
+      return `GPS did not deliver a position in time${code}. Move to open sky and try again — the first fix can take up to a minute.`;
+  }
   return 'No GPS fix yet. Move to open sky, away from buildings and dense canopy, and try again. The trek was not started because there is no starting point to return to.';
 }
 
@@ -351,6 +367,8 @@ async function startTrekOnce(name: string, mode: SamplingMode): Promise<StartRes
       nav: null,
     });
     gpsEvent({ type: 'TRACKING_START', now: Date.now() });
+    // Save the map around the start while there may still be signal. Runs in the background.
+    void import('./offlineMaps').then((m) => m.ensureTrekArea(trek.start, trek.id));
     return { ok: true, trek };
   } catch (e) {
     set({ acquiring: false });
@@ -430,6 +448,8 @@ export async function restoreTracking(): Promise<void> {
   }
   set({ backgroundActive: background, trackingWarning: background ? null : FOREGROUND_ONLY_WARNING });
   void startLiveWatch();
+  // A map download interrupted by a restart is retried while there may still be signal.
+  void import('./offlineMaps').then((m) => m.ensureTrekArea(trek.start, trek.id));
 }
 
 let appStateHooked = false;

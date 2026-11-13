@@ -19,6 +19,7 @@ export function boot(): Promise<void> {
       await restoreTracking();
       hookAppState();
       void startDeviceMonitors();
+      void import('./offlineMaps').then((m) => m.refreshMapAreas()).catch(() => undefined);
       void resumePendingBle().catch(() => undefined);
       setInterval(() => void checkOverdue().catch(() => undefined), 30_000);
       useApp.getState().set({ ready: true });

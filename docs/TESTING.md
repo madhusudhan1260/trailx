@@ -2,7 +2,7 @@
 
 Nothing below is simulated-and-presented-as-real. Each item says how it was checked.
 
-## Automated (run `npm test`) — 105 tests, all passing
+## Automated (run `npm test`) — 115 tests, all passing
 
 | Area | What is covered |
 |---|---|
@@ -15,6 +15,7 @@ Nothing below is simulated-and-presented-as-real. Each item says how it was chec
 | BLE protocol | encryption round trip, wrong key fails, tamper detection, unique ids, duplicate drop, expiry, hop limit, hop-cap enforcement, relay without key, fragmentation/reassembly |
 | Export | GPX segments and points, JSON losslessness, file names |
 | Profile & onboarding (`profile.test.ts`) | personal-detail validation (names, real dates, no future birthdays, E.164 phones, optional email), contact rules (own number refused), greeting from preferred name, UUID v4, field encryption round trip / wrong key / field swap / no plaintext on disk, v1→v2 migration keeps data, profile survives a process restart (no repeated onboarding), edit updates greeting, failed onboarding save leaves nothing half-written, lost key never overwrites encrypted details |
+| Maps (`map.test.ts`) | slippy tile numbers cross-checked with an independent formula, tile listing = tile count, 5 km trek area fits OpenFreeMap's 3,000-tile offline limit at full detail, oversized areas shrink instead of exceeding it, trail GeoJSON uses only recorded points (measured lines, dashed estimated gaps, pause segments never joined), waypoints/start/position/accuracy circle, saved areas recorded → completed → found by position → deleted, interrupted downloads marked failed on next launch |
 | GPS acquisition (`gps.test.ts`) | browser adapter + state machine: genuine fix, permission denied, timeout before first fix is *searching* not *lost*, position unavailable, poor accuracy shown weak and still rejected by the filter, interruption → probe → watch restart → reacquiring, recovery, repeated START creates one watcher / one trek, STOP clears watch + timers and ignores late callbacks, web vs native backend selection, unsupported browser, insecure http:// page, browser fixes recorded by the existing TrekRecorder |
 
 ## Checked by running the app in a browser (Expo web)
@@ -38,6 +39,13 @@ recovered by itself. The test trek was discarded. A real phone outdoors has stil
 Onboarding (Nov 2026, browser preview at phone size): validation errors on empty fields, own number
 refused as emergency contact, all four steps completed, profile and greeting ("Hello, Asha!")
 survived a reload with no repeated onboarding, editing the preferred name changed the greeting.
+
+Map (Nov 2026, browser preview with a geolocation test double): the real OpenFreeMap/OpenStreetMap
+map rendered under the recorded trail (lime), a dashed estimated gap and the live position; the
+5 km area around the trek start saved itself automatically (7.2 MB) and resumed after a reload;
+with every request to the map server blocked, the map was rebuilt entirely from the saved cache
+(8 cache reads, 0 network requests). The native MapLibre renderer and offline packs compile into the
+Android bundle but have **not been run on a phone**.
 
 ### Testing GPS in a phone browser
 

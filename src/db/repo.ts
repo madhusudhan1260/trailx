@@ -1,5 +1,6 @@
 import type { AlertChannel, AlertStatus, EmergencyContact, EmergencyKind, EmergencyProfile } from '@/core/emergency';
 import { decryptField, encryptField } from '@/core/fieldCipher';
+import { bboxContains, type BBox } from '@/core/tiles';
 import type { AltitudeUnit, DistanceUnit, Profile } from '@/core/profile';
 import type { SamplingMode, TrackPoint, TrekStats, TrekStatus } from '@/core/types';
 import type { Db } from './schema';
@@ -324,4 +325,55 @@ export async function saveBleMessage(db: Db, m: BleMessage): Promise<boolean> {
 export async function listBleMessages(db: Db, now: number): Promise<BleMessage[]> {
   await db.run('DELETE FROM ble_messages WHERE expires_at < ?', [now]);
   return (await db.all<any>('SELECT * FROM ble_messages ORDER BY received_at DESC')).map((r) => ({ msgId: r.msg_id, receivedAt: r.received_at, hops: r.hops, readable: !!r.readable, payload: r.payload ? JSON.parse(r.payload) : null, packet: r.packet, expiresAt: r.expires_at }));
+}
+
+// ---------------------------------------------------------------- offline map areas
+
+export interface MapArea {
+  id: number;
+  name: string;
+  bbox: BBox;
+  minZoom: number;
+  maxZoom: number;
+  tileCount: number;
+  bytes: number;
+  status: 'downloading' | 'complete' | 'failed';
+  error: string | null;
+  packId: string | null;
+  sessionId: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+const area = (r: any): MapArea => ({
+  id: r.id, name: r.name, bbox: [r.west, r.south, r.east, r.north], minZoom: r.min_zoom, maxZoom: r.max_zoom, tileCount: r.tile_count,
+  bytes: r.bytes, status: r.status, error: r.error, packId: r.pack_id, sessionId: r.session_id, createdAt: r.created_at, updatedAt: r.updated_at,
+});
+
+export async function addMapArea(db: Db, a: { name: string; bbox: BBox; minZoom: number; maxZoom: number; tileCount: number; sessionId: number | null; now: number }): Promise<number> {
+  const r = await db.run(
+    "INSERT INTO map_areas (name, west, south, east, north, min_zoom, max_zoom, tile_count, status, session_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?, 'downloading', ?,?,?)",
+    [a.name, ...a.bbox, a.minZoom, a.maxZoom, a.tileCount, a.sessionId, a.now, a.now],
+  );
+  return r.lastId;
+}
+
+export async function updateMapArea(db: Db, id: number, p: { status?: MapArea['status']; bytes?: number; error?: string | null; packId?: string | null; now: number }) {
+  await db.run(
+    'UPDATE map_areas SET status = COALESCE(?, status), bytes = COALESCE(?, bytes), error = ?, pack_id = COALESCE(?, pack_id), updated_at = ? WHERE id = ?',
+    [p.status ?? null, p.bytes ?? null, p.error ?? null, p.packId ?? null, p.now, id],
+  );
+}
+
+export async function listMapAreas(db: Db): Promise<MapArea[]> {
+  return (await db.all<any>('SELECT * FROM map_areas ORDER BY created_at DESC')).map(area);
+}
+
+export async function deleteMapArea(db: Db, id: number) {
+  await db.run('DELETE FROM map_areas WHERE id = ?', [id]);
+}
+
+/** The completed area that covers a point, if any. */
+export function coveringArea(areas: MapArea[], lat: number, lon: number): MapArea | null {
+  return areas.find((a) => a.status === 'complete' && bboxContains(a.bbox, lat, lon)) ?? null;
 }
