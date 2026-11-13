@@ -16,7 +16,8 @@ export async function startDeviceMonitors() {
   const { set } = useApp.getState();
 
   // ---- battery
-  try {
+  if (Platform.OS === 'web') await startWebBattery();
+  else try {
     if (await Battery.isAvailableAsync()) {
       const p = await Battery.getPowerStateAsync();
       set({ battery: p.batteryLevel >= 0 ? p.batteryLevel : null, charging: p.batteryState === Battery.BatteryState.CHARGING || p.batteryState === Battery.BatteryState.FULL, lowPowerMode: !!p.lowPowerMode });
@@ -44,6 +45,30 @@ export async function startDeviceMonitors() {
     Network.addNetworkStateListener((e) => set({ online: e.isInternetReachable ?? e.isConnected ?? null }));
   } catch {
     set({ online: null });
+  }
+}
+
+/**
+ * Browsers: read the Battery Status API directly. expo-battery's web build reads the level but has
+ * no event emitter, so subscribing to changes threw and the real reading was replaced by "unknown".
+ * Safari and every iPhone browser do not expose battery at all — there it stays "unknown", honestly.
+ */
+async function startWebBattery() {
+  const { set } = useApp.getState();
+  type BatteryManager = EventTarget & { level: number; charging: boolean };
+  const nav = (globalThis as { navigator?: { getBattery?: () => Promise<BatteryManager> } }).navigator;
+  if (!nav?.getBattery) return set({ battery: null });
+  try {
+    const b = await nav.getBattery();
+    const read = () => {
+      set({ battery: Number.isFinite(b.level) ? b.level : null, charging: b.charging });
+      checkLowBattery();
+    };
+    read();
+    b.addEventListener('levelchange', read);
+    b.addEventListener('chargingchange', read);
+  } catch {
+    set({ battery: null });
   }
 }
 
