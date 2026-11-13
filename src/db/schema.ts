@@ -11,7 +11,7 @@ export interface Db {
   tx<T>(fn: () => Promise<T>): Promise<T>;
 }
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const V1 = `
 CREATE TABLE IF NOT EXISTS users (
@@ -187,6 +187,12 @@ CREATE TABLE IF NOT EXISTS ble_messages (
 );
 `;
 
+/** v2: full one-time onboarding profile. Existing rows keep their data; new columns start empty. */
+const V2_USER_COLUMNS = [
+  'uid TEXT', 'preferred_name TEXT', 'photo_uri TEXT', 'dob TEXT', 'phone TEXT', 'email TEXT', 'gender TEXT', 'language TEXT',
+  'emergency_notes TEXT', 'experience TEXT', 'difficulty TEXT', 'typical_duration TEXT', 'profile_created_at INTEGER', 'updated_at INTEGER',
+];
+
 export async function migrate(db: Db, now = Date.now()): Promise<void> {
   await db.exec('PRAGMA journal_mode = WAL;');
   await db.exec('PRAGMA foreign_keys = ON;');
@@ -196,6 +202,13 @@ export async function migrate(db: Db, now = Date.now()): Promise<void> {
     await db.tx(async () => {
       await db.exec(V1);
       await db.run('INSERT OR IGNORE INTO users (id, created_at) VALUES (1, ?)', [now]);
+    });
+    await db.exec('PRAGMA user_version = 1');
+  }
+  if (v < 2) {
+    await db.tx(async () => {
+      const have = new Set((await db.all<{ name: string }>("SELECT name FROM pragma_table_info('users')")).map((c) => c.name));
+      for (const col of V2_USER_COLUMNS) if (!have.has(col.split(' ')[0])) await db.exec(`ALTER TABLE users ADD COLUMN ${col}`);
     });
     await db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   }

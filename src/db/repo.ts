@@ -1,4 +1,6 @@
 import type { AlertChannel, AlertStatus, EmergencyContact, EmergencyKind, EmergencyProfile } from '@/core/emergency';
+import { decryptField, encryptField } from '@/core/fieldCipher';
+import type { AltitudeUnit, DistanceUnit, Profile } from '@/core/profile';
 import type { SamplingMode, TrackPoint, TrekStats, TrekStatus } from '@/core/types';
 import type { Db } from './schema';
 
@@ -10,34 +12,86 @@ export interface Settings {
   sosHoldSeconds: number;
   haptics: boolean;
   lowBatteryWarn: number;
-  units: 'metric';
+  distanceUnit: DistanceUnit;
+  altitudeUnit: AltitudeUnit;
 }
 
-export const DEFAULT_SETTINGS: Settings = { samplingMode: 'balanced', sosHoldSeconds: 2, haptics: true, lowBatteryWarn: 0.2, units: 'metric' };
+export const DEFAULT_SETTINGS: Settings = { samplingMode: 'balanced', sosHoldSeconds: 2, haptics: true, lowBatteryWarn: 0.2, distanceUnit: 'km', altitudeUnit: 'm' };
 
-export interface User extends EmergencyProfile {
+/** Profile fields that are encrypted at rest when a device key is available. */
+export const SENSITIVE_FIELDS = ['medical', 'allergies', 'emergencyNotes'] as const;
+export type SensitiveField = (typeof SENSITIVE_FIELDS)[number];
+const SENSITIVE_COLUMN: Record<SensitiveField, string> = { medical: 'medical', allergies: 'allergies', emergencyNotes: 'emergency_notes' };
+
+/** `name` is the full name (kept under that key because emergency messages use it). */
+export interface User extends EmergencyProfile, Omit<Profile, 'fullName' | 'bloodGroup' | 'medical' | 'allergies'> {
   partyCode: string | null;
   onboarded: boolean;
   settings: Settings;
+  /** Sensitive fields that exist on disk but could not be decrypted (device key missing). Never overwritten blindly. */
+  unreadable: SensitiveField[];
 }
 
-export async function getUser(db: Db): Promise<User> {
+export interface FieldKey {
+  key: Uint8Array | null;
+  nonce: () => Uint8Array;
+}
+
+export async function getUser(db: Db, key: Uint8Array | null = null): Promise<User> {
   const r = await db.first<any>('SELECT * FROM users WHERE id = 1');
+  const unreadable: SensitiveField[] = [];
+  const open = (f: SensitiveField) => {
+    const d = decryptField(key, f, r?.[SENSITIVE_COLUMN[f]] ?? null);
+    if (!d.ok) unreadable.push(f);
+    return d.value;
+  };
   return {
+    uid: r?.uid ?? null,
     name: r?.name ?? null,
+    preferredName: r?.preferred_name ?? null,
+    photoUri: r?.photo_uri ?? null,
+    dob: r?.dob ?? null,
+    phone: r?.phone ?? null,
+    email: r?.email ?? null,
+    gender: r?.gender ?? null,
+    language: r?.language ?? null,
     bloodGroup: r?.blood_group ?? null,
-    medical: r?.medical ?? null,
-    allergies: r?.allergies ?? null,
+    medical: open('medical'),
+    allergies: open('allergies'),
+    emergencyNotes: open('emergencyNotes'),
+    experience: r?.experience ?? null,
+    difficulty: r?.difficulty ?? null,
+    typicalDuration: r?.typical_duration ?? null,
+    profileCreatedAt: r?.profile_created_at ?? null,
+    profileUpdatedAt: r?.updated_at ?? null,
     partyCode: r?.party_code ?? null,
     onboarded: !!r?.onboarded,
     settings: { ...DEFAULT_SETTINGS, ...(r?.settings ? JSON.parse(r.settings) : {}) },
+    unreadable,
   };
 }
 
-export async function saveUser(db: Db, u: User): Promise<void> {
-  await db.run('UPDATE users SET name = ?, blood_group = ?, medical = ?, allergies = ?, party_code = ?, onboarded = ?, settings = ? WHERE id = 1', [
-    u.name || null, u.bloodGroup || null, u.medical || null, u.allergies || null, u.partyCode || null, u.onboarded ? 1 : 0, JSON.stringify(u.settings),
-  ]);
+export async function saveUser(db: Db, u: User, fk: FieldKey = { key: null, nonce: () => new Uint8Array(24) }, now = Date.now()): Promise<void> {
+  const raw = await db.first<Record<string, string | null>>('SELECT medical, allergies, emergency_notes FROM users WHERE id = 1');
+  const seal = (f: SensitiveField) => {
+    const v = u[f];
+    // A value we could not decrypt is kept exactly as stored unless the user typed a new one.
+    if ((v == null || v === '') && u.unreadable.includes(f)) return raw?.[SENSITIVE_COLUMN[f]] ?? null;
+    return encryptField(fk.key, f, v || null, fk.nonce);
+  };
+  await db.run(
+    `UPDATE users SET name = ?, preferred_name = ?, photo_uri = ?, dob = ?, phone = ?, email = ?, gender = ?, language = ?,
+       blood_group = ?, medical = ?, allergies = ?, emergency_notes = ?, experience = ?, difficulty = ?, typical_duration = ?,
+       uid = ?, party_code = ?, onboarded = ?, settings = ?,
+       profile_created_at = COALESCE(profile_created_at, ?), updated_at = ?
+     WHERE id = 1`,
+    [
+      u.name || null, u.preferredName || null, u.photoUri || null, u.dob || null, u.phone || null, u.email || null, u.gender || null, u.language || null,
+      u.bloodGroup || null, seal('medical'), seal('allergies'), seal('emergencyNotes'), u.experience || null, u.difficulty || null, u.typicalDuration || null,
+      u.uid || null, u.partyCode || null, u.onboarded ? 1 : 0, JSON.stringify(u.settings),
+      u.onboarded || u.name ? now : null, now,
+    ],
+  );
 }
 
 // ---------------------------------------------------------------- treks

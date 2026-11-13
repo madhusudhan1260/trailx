@@ -2,7 +2,7 @@
 
 Nothing below is simulated-and-presented-as-real. Each item says how it was checked.
 
-## Automated (run `npm test`) — 89 tests, all passing
+## Automated (run `npm test`) — 105 tests, all passing
 
 | Area | What is covered |
 |---|---|
@@ -14,6 +14,7 @@ Nothing below is simulated-and-presented-as-real. Each item says how it was chec
 | Emergency | every required message field, last-known vs live wording, unknown location, SOS with no connectivity stores event + trail + queue, delivery states cannot skip to "confirmed", resolve, safety plan attach |
 | BLE protocol | encryption round trip, wrong key fails, tamper detection, unique ids, duplicate drop, expiry, hop limit, hop-cap enforcement, relay without key, fragmentation/reassembly |
 | Export | GPX segments and points, JSON losslessness, file names |
+| Profile & onboarding (`profile.test.ts`) | personal-detail validation (names, real dates, no future birthdays, E.164 phones, optional email), contact rules (own number refused), greeting from preferred name, UUID v4, field encryption round trip / wrong key / field swap / no plaintext on disk, v1→v2 migration keeps data, profile survives a process restart (no repeated onboarding), edit updates greeting, failed onboarding save leaves nothing half-written, lost key never overwrites encrypted details |
 | GPS acquisition (`gps.test.ts`) | browser adapter + state machine: genuine fix, permission denied, timeout before first fix is *searching* not *lost*, position unavailable, poor accuracy shown weak and still rejected by the filter, interruption → probe → watch restart → reacquiring, recovery, repeated START creates one watcher / one trek, STOP clears watch + timers and ignores late callbacks, web vs native backend selection, unsupported browser, insecure http:// page, browser fixes recorded by the existing TrekRecorder |
 
 ## Checked by running the app in a browser (Expo web)
@@ -33,6 +34,10 @@ GPS fix (Nov 2026): with a *test double* for `navigator.geolocation` injected in
 (never shipped), START TREK acquired a fix, created one watcher with `enableHighAccuracy`, recorded
 breadcrumbs, showed "Reacquiring GPS…" during a 38 s outage while recording continued, and
 recovered by itself. The test trek was discarded. A real phone outdoors has still not been tested.
+
+Onboarding (Nov 2026, browser preview at phone size): validation errors on empty fields, own number
+refused as emergency contact, all four steps completed, profile and greeting ("Hello, Asha!")
+survived a reload with no repeated onboarding, editing the preferred name changed the greeting.
 
 ### Testing GPS in a phone browser
 

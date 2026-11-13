@@ -17,6 +17,8 @@ export interface RaiseInput {
   battery: number | null;
   destination: string | null;
   now: number;
+  /** Device key for the encrypted medical fields (null on web / in tests without encryption). */
+  profileKey?: Uint8Array | null;
   randomBytes: (n: number) => Uint8Array;
 }
 
@@ -26,7 +28,7 @@ export interface RaiseInput {
  * is killed a moment later. Nothing here touches the network.
  */
 export async function raiseEmergency(db: Db, input: RaiseInput): Promise<EmergencyEvent> {
-  const user = await getUser(db);
+  const user = await getUser(db, input.profileKey ?? null);
   const contacts = await listContacts(db);
   const reliable = lastReliable(input.liveFix ? [...input.recentFixes, input.liveFix] : input.recentFixes);
   const liveOk = input.liveFix != null && input.liveFix.acc != null;

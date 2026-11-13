@@ -1,7 +1,8 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ChevronRight, ClipboardList, History, ShieldAlert, TriangleAlert, User } from 'lucide-react-native';
+import { ChevronRight, ClipboardList, History, ShieldAlert, TriangleAlert } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
+import { greetingName } from '@/core/profile';
 import { fmtDistance, fmtDuration } from '@/core/stats';
 import { getDb } from '@/db';
 import { getDraftPlan, listContacts, listTreks, totals, type SafetyPlan, type TrekSummary } from '@/db/repo';
@@ -10,6 +11,7 @@ import { useApp } from '@/store';
 import { Logo, MountainScene } from '@/ui/Brand';
 import { StartButton } from '@/ui/Buttons';
 import { Banner, Enter, Glass, IconButton, Screen, T, Tap } from '@/ui/primitives';
+import { Avatar } from '@/ui/Avatar';
 import { Stat } from '@/ui/Stat';
 import { StatusRow, useGps } from '@/ui/Status';
 import { C, S } from '@/ui/theme';
@@ -66,12 +68,13 @@ export default function Home() {
         <Enter>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Logo size={38} wordmark />
-            <IconButton icon={User} onPress={() => router.push('/profile')} label="Profile" />
+            <Avatar user={user} onPress={() => router.push('/profile')} />
           </View>
         </Enter>
         <Enter delay={80} style={{ marginTop: S.xl }}>
           <T v="label" color={C.limeDim}>{greeting()}</T>
-          <T v="title" style={{ marginTop: 4 }}>{user?.name ? `${user.name.split(' ')[0]}, where to today?` : 'Where to today?'}</T>
+          <T v="title" style={{ marginTop: 4 }}>{greetingName(user) ? `Hello, ${greetingName(user)}!` : 'Hello!'}</T>
+          <T style={{ marginTop: 2 }}>Where to today?</T>
         </Enter>
         <Enter delay={140} style={{ marginTop: S.lg }}><StatusRow /></Enter>
 

@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#050806",
-    "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "app.trailx.mobile",
@@ -103,7 +102,8 @@
           ],
           "bluetoothAlwaysPermission": "TRAILX exchanges encrypted emergency messages with nearby TRAILX devices over Bluetooth."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": false

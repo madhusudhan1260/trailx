@@ -1,8 +1,9 @@
 import { getDb } from '@/db';
-import { getUser, saveUser, type User } from '@/db/repo';
+import type { User } from '@/db/repo';
 import { useApp } from '@/store';
 import { startDeviceMonitors } from './device';
 import { configureNotifications } from './notify';
+import { loadUser, persistUser } from './profileStore';
 import { checkOverdue, resumePendingBle } from './sos';
 import { hookAppState, restoreTracking } from './tracking';
 
@@ -13,7 +14,7 @@ export function boot(): Promise<void> {
   if (!booting) {
     booting = (async () => {
       const db = await getDb();
-      useApp.getState().set({ user: await getUser(db) });
+      useApp.getState().set({ user: await loadUser() });
       await configureNotifications();
       await restoreTracking();
       hookAppState();
@@ -31,6 +32,5 @@ export async function updateUser(patch: Partial<User>): Promise<void> {
   const cur = useApp.getState().user;
   if (!cur) return;
   const next = { ...cur, ...patch, settings: { ...cur.settings, ...(patch.settings ?? {}) } };
-  await saveUser(await getDb(), next);
-  useApp.getState().set({ user: next });
+  useApp.getState().set({ user: await persistUser(next) });
 }

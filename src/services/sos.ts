@@ -5,6 +5,7 @@ import { Platform, Share } from 'react-native';
 import { overdueLevel, type ChannelAvailability, type EmergencyEvent, type EmergencyKind } from '@/core/emergency';
 import type { SosPayload } from '@/core/protocol';
 import { getDb } from '@/db';
+import { getFieldKey } from './profileStore';
 import { getEvent, listAlerts, listContacts, updatePlan, type StoredAlert, type StoredEvent } from '@/db/repo';
 import { useApp } from '@/store';
 import { activePeerCount, clearOutboxFor, queueSos, startBle, useBle } from './ble';
@@ -32,6 +33,7 @@ export async function triggerEmergency(kind: EmergencyKind): Promise<EmergencyEv
   const st = useApp.getState();
   const db = await getDb();
   const event = await raiseEmergency(db, {
+    profileKey: (await getFieldKey()).key,
     kind,
     sessionId: st.trek?.id ?? null,
     liveFix,
